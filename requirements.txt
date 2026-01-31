@@ -1,7 +1,7 @@
 librosa
 mido
 numpy
-pygame
+pygame-ce
 scipy
 matplotlib
 pyinstaller
