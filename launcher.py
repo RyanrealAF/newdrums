@@ -1,7 +1,15 @@
 import sys
 import os
-import subprocess
 import time
+
+try:
+    from audio_to_midi import audio_to_midi
+    from rsharp import RSharp, DrumHitEffect, ParticleEmitterEffect
+    import pygame
+except ImportError as e:
+    print(f"Error: Missing dependency {e}")
+    print("Please run: pip install -r requirements.txt")
+    sys.exit(1)
 
 def main():
     # Check if a file was dropped or passed as argument
@@ -31,25 +39,33 @@ def main():
     # Step 1: Convert Audio to MIDI
     print("\n[1/2] Converting Audio to MIDI...")
     try:
-        # Construct command for audio_to_midi.py
-        cmd_convert = [
-            sys.executable, "audio_to_midi.py", 
-            audio_path,
-            "--output", midi_path,
-            "--bpm", "120",
-            "--dynamic"
-        ]
-        subprocess.check_call(cmd_convert)
+        # Direct call to conversion function
+        # audio_to_midi(input_file, output_file, bpm, note, velocity, dynamic)
+        audio_to_midi(audio_path, midi_path, 120, 36, 90, True)
         print("Conversion complete.")
         time.sleep(1.5)
         
         # Step 2: Run Visualizer
         print("\n[2/2] Launching Visualizer...")
-        cmd_viz = [sys.executable, "rsharp.py", midi_path, "--bpm", "120", "--audio", audio_path]
-        subprocess.check_call(cmd_viz)
         
-    except subprocess.CalledProcessError as e:
-        print(f"Error: {e}")
+        # Initialize Visualizer
+        rsharp = RSharp(midi_path, audio_file=audio_path, bpm=120)
+        
+        # Add effects
+        drum_hits = DrumHitEffect(rsharp.screen_width, rsharp.screen_height)
+        particle_emitter = ParticleEmitterEffect(rsharp.screen_width, rsharp.screen_height)
+        
+        rsharp.add_visual_effect(drum_hits)
+        rsharp.add_visual_effect(particle_emitter)
+        
+        print("Starting R# visualizer...")
+        print("Press ESC or close the window to exit")
+        rsharp.run()
+        
+    except Exception as e:
+        print(f"Error during execution: {e}")
+        # Keep console open briefly to show error
+        time.sleep(5)
     except KeyboardInterrupt:
         print("\nExiting...")
 

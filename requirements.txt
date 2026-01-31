@@ -1,6 +1,7 @@
 librosa
 mido
 numpy
-scipy
 pygame
+scipy
 matplotlib
+pyinstaller
