@@ -42,7 +42,7 @@ def main():
         
         # Step 2: Run Visualizer
         print("\n[2/2] Launching Visualizer...")
-        cmd_viz = [sys.executable, "rsharp.py", midi_path, "--bpm", "120"]
+        cmd_viz = [sys.executable, "rsharp.py", midi_path, "--bpm", "120", "--audio", audio_path]
         subprocess.check_call(cmd_viz)
         
     except subprocess.CalledProcessError as e:

@@ -6,10 +6,12 @@ import time
 import sys
 
 class RSharp:
-    def __init__(self, midi_file, bpm=120):
+    def __init__(self, midi_file, audio_file=None, bpm=120):
         self.midi_file = midi_file
+        self.audio_file = audio_file
         self.bpm = bpm
         self.events = []
+        self.event_index = 0
         self.current_time = 0
         self.running = False
         self.visual_effects = []
@@ -59,24 +61,33 @@ class RSharp:
     def add_visual_effect(self, effect):
         """Add a visual effect to the scene"""
         self.visual_effects.append(effect)
+
+    def reset_visualizer(self):
+        """Reset the visualizer state"""
+        self.event_index = 0
+        self.current_time = 0
+        if self.audio_file:
+            try:
+                pygame.mixer.music.play()
+            except Exception as e:
+                print(f"Error restarting audio: {e}")
+        
+        for effect in self.visual_effects:
+            effect.reset()
         
     def process_events(self):
         """Process MIDI events based on current time"""
         # Find all events that should be triggered now
         triggered_events = []
-        event_indices = []
         
-        for i, event in enumerate(self.events):
+        while self.event_index < len(self.events):
+            event = self.events[self.event_index]
             if event['time'] <= self.current_time:
                 triggered_events.append(event)
-                event_indices.append(i)
+                self.event_index += 1
             else:
                 break
                 
-        # Remove processed events
-        for i in reversed(event_indices):
-            del self.events[i]
-            
         # Trigger visual effects for each event
         for event in triggered_events:
             for effect in self.visual_effects:
@@ -87,38 +98,93 @@ class RSharp:
         for effect in self.visual_effects:
             effect.update()
             
-    def render(self):
-        """Render all visual effects"""
+    def draw(self):
+        """Draw all visual effects (without flipping display)"""
         # Clear screen
         self.screen.fill((20, 20, 20))
         
         # Render effects
         for effect in self.visual_effects:
             effect.render(self.screen)
-            
-        # Update display
-        pygame.display.flip()
         
     def run(self):
         """Main loop"""
         self.running = True
+        self.paused = False
+        
+        if self.audio_file:
+            try:
+                pygame.mixer.music.load(self.audio_file)
+                pygame.mixer.music.play()
+            except Exception as e:
+                print(f"Error playing audio: {e}")
+                
         start_time = time.time()
+        
+        # Pause tracking
+        pause_offset = 0
+        last_pause_time = 0
+        
+        # UI Elements
+        font = pygame.font.Font(None, 24)
+        reset_btn_rect = pygame.Rect(10, 10, 80, 30)
         
         while self.running:
             # Handle events
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     self.running = False
+                elif event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE:
+                        self.running = False
+                    elif event.key == pygame.K_SPACE:
+                        self.paused = not self.paused
+                        if self.paused:
+                            if self.audio_file: pygame.mixer.music.pause()
+                            last_pause_time = time.time()
+                        else:
+                            if self.audio_file: pygame.mixer.music.unpause()
+                            pause_offset += time.time() - last_pause_time
+                    elif event.key == pygame.K_r:
+                        self.reset_visualizer()
+                        start_time = time.time()
+                        pause_offset = 0
+                        self.paused = False
+                elif event.type == pygame.MOUSEBUTTONDOWN:
+                    if event.button == 1: # Left click
+                        if reset_btn_rect.collidepoint(event.pos):
+                            self.reset_visualizer()
+                            start_time = time.time()
+                            pause_offset = 0
+                            self.paused = False
+            
+            if self.paused:
+                # Draw paused state overlay
+                pause_text = font.render("PAUSED", True, (255, 255, 255))
+                text_rect = pause_text.get_rect(center=(self.screen_width/2, self.screen_height/2))
+                self.screen.blit(pause_text, text_rect)
+                pygame.display.flip()
+                self.clock.tick(30)
+                continue
                     
             # Calculate current time
-            self.current_time = time.time() - start_time
+            self.current_time = time.time() - start_time - pause_offset
             
             # Process MIDI events
             self.process_events()
             
             # Update and render
             self.update()
-            self.render()
+            self.draw()
+            
+            # Draw UI
+            pygame.draw.rect(self.screen, (60, 60, 60), reset_btn_rect)
+            pygame.draw.rect(self.screen, (200, 200, 200), reset_btn_rect, 1)
+            btn_text = font.render("RESET", True, (200, 200, 200))
+            text_rect = btn_text.get_rect(center=reset_btn_rect.center)
+            self.screen.blit(btn_text, text_rect)
+            
+            pygame.display.flip()
             
             # Cap framerate
             self.clock.tick(60)
@@ -140,6 +206,10 @@ class VisualEffect:
         
     def render(self, screen):
         """Render effect to screen"""
+        pass
+        
+    def reset(self):
+        """Reset effect state"""
         pass
         
 # General MIDI Drum Map Positions (normalized 0-1)
@@ -165,6 +235,9 @@ class DrumHitEffect(VisualEffect):
         super().__init__()
         self.width = width
         self.height = height
+        self.hits = []
+        
+    def reset(self):
         self.hits = []
         
     def trigger(self, event):
@@ -248,6 +321,9 @@ class ParticleEmitterEffect(VisualEffect):
         self.width = width
         self.height = height
         self.max_particles = max_particles
+        self.particles = []
+        
+    def reset(self):
         self.particles = []
         
     def trigger(self, event):
@@ -344,10 +420,11 @@ def main():
     parser = argparse.ArgumentParser(description="R# - MIDI Visualizer")
     parser.add_argument("midi_file", help="Path to input MIDI file")
     parser.add_argument("--bpm", "-b", type=int, default=120, help="BPM of the track")
+    parser.add_argument("--audio", "-a", help="Path to audio file for playback")
     args = parser.parse_args()
     
     # Create R# instance
-    rsharp = RSharp(args.midi_file, args.bpm)
+    rsharp = RSharp(args.midi_file, args.audio, args.bpm)
     
     # Add visual effects
     drum_hits = DrumHitEffect(rsharp.screen_width, rsharp.screen_height)
