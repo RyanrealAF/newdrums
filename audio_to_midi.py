@@ -1,84 +1,78 @@
+import argparse
 import librosa
 import mido
 import numpy as np
-import argparse
-import sys
-from mido import MidiFile, MidiTrack, Message, MetaMessage
 
-def generate_midi(input_file, output_file, bpm, note=36, velocity=90, dynamic_velocity=False):
-    # Load audio
+def audio_to_midi(input_file, output_file, bpm, note, velocity, dynamic):
     print(f"Loading {input_file}...")
     try:
-        y, sr = librosa.load(input_file, sr=None)
+        y, sr = librosa.load(input_file)
     except Exception as e:
         print(f"Error loading audio file: {e}")
-        sys.exit(1)
-
-    # Harmonic-Percussive Source Separation (HPSS)
-    # This isolates percussive elements (drums) from melodic ones
-    print("Separating percussive elements...")
-    y_harmonic, y_percussive = librosa.effects.hpss(y)
-
-    # Detect onset envelopes on percussive track for cleaner hits
-    print("Detecting onsets...")
-    onset_env = librosa.onset.onset_strength(y=y_percussive, sr=sr)
-    onset_frames = librosa.onset.onset_detect(onset_envelope=onset_env, sr=sr, backtrack=True)
-    onset_times = librosa.frames_to_time(onset_frames, sr=sr)
-
-    # Calculate velocities
-    if dynamic_velocity and len(onset_frames) > 0:
-        strengths = onset_env[onset_frames]
-        max_strength = np.max(strengths)
-        if max_strength > 0:
-            # Scale to 1-127 range based on relative strength, maxing at requested velocity
-            velocities = (strengths / max_strength * (velocity - 1) + 1).astype(int)
-        else:
-            velocities = np.full(len(onset_frames), velocity)
-    else:
-        velocities = np.full(len(onset_times), velocity)
-
-    # Initialize MIDI
-    mid = MidiFile()
-    track = MidiTrack()
-    mid.tracks.append(track)
-
-    ticks_per_beat = 480
-    tempo = mido.bpm2tempo(bpm)
-    track.append(MetaMessage('set_tempo', tempo=tempo))
-
-    current_tick = 0
-    duration_ticks = 10
+        return
     
-    print(f"Processing {len(onset_times)} onsets...")
-
-    for i, time in enumerate(onset_times):
-        # Calculate absolute tick position
-        target_tick = int(mido.second2tick(time, ticks_per_beat, tempo))
+    print("Analyzing audio for onsets...")
+    onset_env = librosa.onset.onset_strength(y=y, sr=sr)
+    onset_frames = librosa.onset.onset_detect(onset_envelope=onset_env, sr=sr)
+    onset_times = librosa.frames_to_time(onset_frames, sr=sr)
+    
+    # Create MIDI file
+    mid = mido.MidiFile()
+    track = mido.MidiTrack()
+    mid.tracks.append(track)
+    
+    ticks_per_beat = 480
+    mid.ticks_per_beat = ticks_per_beat
+    
+    # Set tempo
+    microseconds_per_beat = mido.bpm2tempo(bpm)
+    track.append(mido.MetaMessage('set_tempo', tempo=microseconds_per_beat, time=0))
+    
+    events = []
+    
+    max_strength = np.max(onset_env) if len(onset_env) > 0 else 1
+    
+    for i, t in enumerate(onset_times):
+        current_velocity = velocity
+        if dynamic:
+            frame_idx = onset_frames[i]
+            if frame_idx < len(onset_env):
+                strength = onset_env[frame_idx]
+                norm_strength = strength / max_strength if max_strength > 0 else 0
+                current_velocity = int(norm_strength * 127)
+                current_velocity = max(1, min(127, current_velocity))
         
         # Note On
-        delta_on = max(0, target_tick - current_tick)
-        track.append(Message('note_on', note=note, velocity=int(velocities[i]), time=delta_on))
-        current_tick += delta_on
+        events.append({'time': t, 'type': 'note_on', 'velocity': current_velocity})
+        # Note Off (short duration later)
+        events.append({'time': t + 0.1, 'type': 'note_off', 'velocity': 0})
         
-        # Note Off (Fixed short duration for trigger-style visuals)
-        track.append(Message('note_off', note=note, velocity=0, time=duration_ticks))
-        current_tick += duration_ticks
-
+    events.sort(key=lambda x: x['time'])
+    
+    last_time = 0
+    
+    for event in events:
+        delta_seconds = event['time'] - last_time
+        # Convert seconds to ticks based on BPM
+        delta_ticks = int(delta_seconds * (bpm * ticks_per_beat) / 60)
+        delta_ticks = max(0, delta_ticks)
+        
+        track.append(mido.Message(event['type'], note=note, velocity=event['velocity'], time=delta_ticks))
+        last_time = event['time']
+        
+    print(f"Saving MIDI to {output_file}...")
     mid.save(output_file)
-    print(f"Successfully created: {output_file}")
-
-def main():
-    parser = argparse.ArgumentParser(description='Convert audio to MIDI for visual sync.')
-    parser.add_argument('input', help='Path to the input audio file (e.g., .wav, .mp3)')
-    parser.add_argument('--output', '-o', default='output.mid', help='Path to the output MIDI file (default: output.mid)')
-    parser.add_argument('--bpm', '-b', type=float, default=120.0, help='BPM of the track (default: 120)')
-    parser.add_argument('--note', '-n', type=int, default=36, help='MIDI note number (default: 36/Kick Drum)')
-    parser.add_argument('--velocity', '-v', type=int, default=90, help='Fixed velocity or max velocity (default: 90)')
-    parser.add_argument('--dynamic', action='store_true', help='Use dynamic velocity based on onset strength')
-
-    args = parser.parse_args()
-
-    generate_midi(args.input, args.output, args.bpm, args.note, args.velocity, args.dynamic)
+    print(f"Done! Created {len(onset_times)} notes.")
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="Convert audio to MIDI")
+    parser.add_argument("input", help="Path to input audio file")
+    parser.add_argument("--output", "-o", default="output.mid", help="Path to output MIDI file")
+    parser.add_argument("--bpm", "-b", type=int, default=120, help="BPM of the track")
+    parser.add_argument("--note", "-n", type=int, default=36, help="MIDI note number")
+    parser.add_argument("--velocity", "-v", type=int, default=90, help="Velocity")
+    parser.add_argument("--dynamic", action="store_true", help="Enable dynamic velocity")
+    
+    args = parser.parse_args()
+    
+    audio_to_midi(args.input, args.output, args.bpm, args.note, args.velocity, args.dynamic)

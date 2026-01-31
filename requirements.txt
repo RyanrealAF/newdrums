@@ -2,5 +2,5 @@ librosa
 mido
 numpy
 scipy
-matplotlib
 pygame
+matplotlib

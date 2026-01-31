@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio → MIDI Converter | buildwhilebleeding.com</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f8fafc;
+            color: #1e293b;
+            min-height: 100vh;
+            padding: 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 600px;
+            width: 100%;
+            background: #ffffff;
+            border-radius: 12px;
+            padding: 2.5rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            border: 1px solid #e2e8f0;
+        }
+
+        h1 {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            color: #0f172a;
+            letter-spacing: -0.025em;
+        }
+
+        .subtitle {
+            color: #64748b;
+            font-size: 0.95rem;
+            margin-bottom: 2.5rem;
+            font-weight: 400;
+        }
+
+        .file-input-wrapper {
+            position: relative;
+            margin-bottom: 2.5rem;
+        }
+
+        .file-input-label {
+            display: block;
+            padding: 2rem;
+            background: #f1f5f9;
+            border: 2px dashed #cbd5e1;
+            border-radius: 8px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .file-input-label:hover {
+            background: #e2e8f0;
+            border-color: #94a3b8;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        .file-name {
+            margin-top: 1rem;
+            color: #475569;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+
+        .controls {
+            display: grid;
+            gap: 1.5rem;
+            margin-bottom: 2.5rem;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        label {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: #334155;
+            letter-spacing: 0.01em;
+        }
+
+        input[type="number"],
+        input[type="text"] {
+            background: #ffffff;
+            border: 1px solid #d1d5db;
+            color: #1e293b;
+            padding: 0.75rem 1rem;
+            border-radius: 6px;
+            font-family: inherit;
+            font-size: 0.95rem;
+            transition: all 0.2s ease;
+        }
+
+        input[type="number"]:focus,
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+            accent-color: #3b82f6;
+        }
+
+        button {
+            background: #3b82f6;
+            color: #ffffff;
+            border: none;
+            padding: 1rem 2rem;
+            font-family: inherit;
+            font-size: 1rem;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            width: 100%;
+            letter-spacing: 0.01em;
+        }
+
+        button:hover:not(:disabled) {
+            background: #2563eb;
+            box-shadow: 0 10px 15px -3px rgba(59, 130, 246, 0.3), 0 4px 6px -2px rgba(59, 130, 246, 0.15);
+            transform: translateY(-1px);
+        }
+
+        button:disabled {
+            background: #e2e8f0;
+            color: #94a3b8;
+            cursor: not-allowed;
+        }
+
+        .status {
+            margin-top: 2rem;
+            padding: 1rem 1.25rem;
+            background: #f1f5f9;
+            border-left: 4px solid #3b82f6;
+            border-radius: 6px;
+            font-size: 0.875rem;
+            display: none;
+            color: #475569;
+        }
+
+        .status.active {
+            display: block;
+        }
+
+        .status.error {
+            border-color: #ef4444;
+            background: #fef2f2;
+            color: #dc2626;
+        }
+
+        .status.success {
+            border-color: #10b981;
+            background: #f0fdf4;
+            color: #059669;
+        }
+
+        .progress {
+            width: 100%;
+            height: 4px;
+            background: #e2e8f0;
+            margin-top: 1rem;
+            overflow: hidden;
+            border-radius: 2px;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #3b82f6, #2563eb);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .footer {
+            margin-top: 2.5rem;
+            text-align: center;
+            font-size: 0.75rem;
+            color: #94a3b8;
+        }
+
+        .footer a {
+            color: #3b82f6;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .footer a:hover {
+            text-decoration: underline;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+
+        .processing {
+            animation: pulse 1.5s infinite;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Audio → MIDI Converter</h1>
+        <p class="subtitle">Convert audio tracks to MIDI triggers for precise visual synchronization</p>
+
+        <div class="file-input-wrapper">
+            <label for="audioFile" class="file-input-label">
+                <span id="dropText">Drop audio file or click to browse</span>
+            </label>
+            <input type="file" id="audioFile" accept="audio/*">
+            <div id="fileName" class="file-name" style="display:none;"></div>
+        </div>
+
+        <div class="controls">
+            <div class="control-group">
+                <label for="bpm">BPM (Tempo)</label>
+                <input type="number" id="bpm" value="120" min="40" max="200" step="0.1">
+            </div>
+
+            <div class="control-group">
+                <label for="note">MIDI Note (36=Kick, 38=Snare)</label>
+                <input type="number" id="note" value="36" min="0" max="127">
+            </div>
+
+            <div class="control-group">
+                <label for="velocity">Velocity (1-127)</label>
+                <input type="number" id="velocity" value="90" min="1" max="127">
+            </div>
+
+            <div class="checkbox-group">
+                <input type="checkbox" id="dynamicVelocity">
+                <label for="dynamicVelocity">Dynamic velocity (scale based on hit strength)</label>
+            </div>
+
+            <div class="control-group">
+                <label for="outputName">Output filename</label>
+                <input type="text" id="outputName" value="output.mid">
+            </div>
+        </div>
+
+        <button id="convertBtn" disabled>Convert to MIDI</button>
+
+        <div id="status" class="status"></div>
+        <div class="progress" style="display:none;">
+            <div class="progress-bar" id="progressBar"></div>
+        </div>
+
+        <div class="footer">
+            <a href="https://buildwhilebleeding.com" target="_blank">buildwhilebleeding.com</a> | 
+            No server. No tracking. Pure client-side conversion.
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/meyda@5.6.0/dist/web/meyda.min.js"></script>
+    <script>
+        const audioFileInput = document.getElementById('audioFile');
+        const fileNameDisplay = document.getElementById('fileName');
+        const convertBtn = document.getElementById('convertBtn');
+        const statusDiv = document.getElementById('status');
+        const progressBar = document.getElementById('progressBar');
+        const dropText = document.getElementById('dropText');
+
+        let audioBuffer = null;
+        let audioContext = null;
+
+        // File selection handler
+        audioFileInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                await loadAudioFile(file);
+            }
+        });
+
+        // Drag and drop
+        const fileLabel = document.querySelector('.file-input-label');
+        
+        fileLabel.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            fileLabel.style.borderColor = '#3b82f6';
+        });
+
+        fileLabel.addEventListener('dragleave', () => {
+            fileLabel.style.borderColor = '#cbd5e1';
+        });
+
+        fileLabel.addEventListener('drop', async (e) => {
+            e.preventDefault();
+            fileLabel.style.borderColor = '#cbd5e1';
+            const file = e.dataTransfer.files[0];
+            if (file && file.type.startsWith('audio/')) {
+                audioFileInput.files = e.dataTransfer.files;
+                await loadAudioFile(file);
+            }
+        });
+
+        async function loadAudioFile(file) {
+            showStatus('Loading audio file...', 'active');
+            
+            try {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const arrayBuffer = await file.arrayBuffer();
+                audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+                
+                fileNameDisplay.textContent = `Loaded: ${file.name}`;
+                fileNameDisplay.style.display = 'block';
+                convertBtn.disabled = false;
+                
+                showStatus(`Ready: ${audioBuffer.duration.toFixed(2)}s @ ${audioBuffer.sampleRate}Hz`, 'success');
+            } catch (error) {
+                showStatus(`Error loading file: ${error.message}`, 'error');
+                convertBtn.disabled = true;
+            }
+        }
+
+        convertBtn.addEventListener('click', async () => {
+            if (!audioBuffer) return;
+
+            convertBtn.disabled = true;
+            showStatus('Analyzing audio...', 'active processing');
+            document.querySelector('.progress').style.display = 'block';
+
+            try {
+                const bpm = parseFloat(document.getElementById('bpm').value);
+                const note = parseInt(document.getElementById('note').value);
+                const velocity = parseInt(document.getElementById('velocity').value);
+                const dynamicVelocity = document.getElementById('dynamicVelocity').checked;
+                const outputName = document.getElementById('outputName').value;
+
+                // Detect onsets
+                const onsets = await detectOnsets(audioBuffer, bpm, dynamicVelocity);
+                
+                showStatus('Generating MIDI...', 'active processing');
+                
+                // Generate MIDI file
+                const midiData = generateMIDI(onsets, bpm, note, velocity);
+                
+                // Download
+                downloadMIDI(midiData, outputName);
+                
+                showStatus(`Success! ${onsets.length} notes generated`, 'success');
+                convertBtn.disabled = false;
+                
+            } catch (error) {
+                showStatus(`Conversion failed: ${error.message}`, 'error');
+                convertBtn.disabled = false;
+            }
+
+            document.querySelector('.progress').style.display = 'none';
+        });
+
+        async function detectOnsets(buffer, bpm, dynamic) {
+            const channelData = buffer.getChannelData(0);
+            const sampleRate = buffer.sampleRate;
+            
+            // Simple onset detection using energy change
+            const hopSize = 512;
+            const onsets = [];
+            const energies = [];
+            
+            let prevEnergy = 0;
+            
+            for (let i = 0; i < channelData.length; i += hopSize) {
+                const frame = channelData.slice(i, i + hopSize);
+                const energy = frame.reduce((sum, sample) => sum + sample * sample, 0) / frame.length;
+                
+                // Detect sharp increase in energy
+                if (energy > prevEnergy * 1.5 && energy > 0.01) {
+                    const time = i / sampleRate;
+                    onsets.push({
+                        time: time,
+                        strength: energy
+                    });
+                }
+                
+                energies.push(energy);
+                prevEnergy = energy;
+                
+                // Update progress
+                if (i % (hopSize * 100) === 0) {
+                    const progress = (i / channelData.length) * 50; // First 50% is analysis
+                    progressBar.style.width = `${progress}%`;
+                }
+            }
+            
+            // Normalize strengths if dynamic velocity enabled
+            if (dynamic && onsets.length > 0) {
+                const maxStrength = Math.max(...onsets.map(o => o.strength));
+                onsets.forEach(onset => {
+                    onset.normalizedStrength = onset.strength / maxStrength;
+                });
+            }
+            
+            progressBar.style.width = '50%';
+            return onsets;
+        }
+
+        function generateMIDI(onsets, bpm, note, baseVelocity) {
+            // MIDI file structure (simplified Type 0)
+            const ticksPerBeat = 480;
+            const microsecondsPerBeat = 60000000 / bpm;
+            
+            const tracks = [];
+            
+            // Track header with tempo
+            const tempoBytes = [
+                (microsecondsPerBeat >> 16) & 0xFF,
+                (microsecondsPerBeat >> 8) & 0xFF,
+                microsecondsPerBeat & 0xFF
+            ];
+            
+            tracks.push([
+                0x00, 0xFF, 0x51, 0x03, ...tempoBytes // Set tempo meta event
+            ]);
+            
+            let currentTick = 0;
+            
+            onsets.forEach((onset, i) => {
+                const targetTick = Math.round((onset.time * 1000000 / microsecondsPerBeat) * ticksPerBeat);
+                const deltaTick = Math.max(0, targetTick - currentTick);
+                
+                const velocity = onset.normalizedStrength 
+                    ? Math.max(1, Math.round(onset.normalizedStrength * baseVelocity))
+                    : baseVelocity;
+                
+                // Note On
+                tracks.push([
+                    ...encodeVariableLength(deltaTick),
+                    0x90, note, velocity
+                ]);
+                
+                currentTick = targetTick;
+                
+                // Note Off after 10 ticks
+                tracks.push([
+                    ...encodeVariableLength(10),
+                    0x80, note, 0
+                ]);
+                
+                currentTick += 10;
+                
+                // Update progress
+                const progress = 50 + ((i / onsets.length) * 50);
+                progressBar.style.width = `${progress}%`;
+            });
+            
+            // End of track
+            tracks.push([0x00, 0xFF, 0x2F, 0x00]);
+            
+            progressBar.style.width = '100%';
+            
+            // Flatten track data
+            const trackData = tracks.flat();
+            
+            // Build MIDI file
+            const header = [
+                0x4D, 0x54, 0x68, 0x64, // "MThd"
+                0x00, 0x00, 0x00, 0x06, // Header length
+                0x00, 0x00, // Format 0
+                0x00, 0x01, // 1 track
+                (ticksPerBeat >> 8) & 0xFF, ticksPerBeat & 0xFF // Ticks per beat
+            ];
+            
+            const trackHeader = [
+                0x4D, 0x54, 0x72, 0x6B, // "MTrk"
+                (trackData.length >> 24) & 0xFF,
+                (trackData.length >> 16) & 0xFF,
+                (trackData.length >> 8) & 0xFF,
+                trackData.length & 0xFF
+            ];
+            
+            return new Uint8Array([...header, ...trackHeader, ...trackData]);
+        }
+
+        function encodeVariableLength(value) {
+            const bytes = [];
+            bytes.push(value & 0x7F);
+            value >>= 7;
+            
+            while (value > 0) {
+                bytes.unshift((value & 0x7F) | 0x80);
+                value >>= 7;
+            }
+            
+            return bytes;
+        }
+
+        function downloadMIDI(data, filename) {
+            const blob = new Blob([data], { type: 'audio/midi' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename.endsWith('.mid') ? filename : `${filename}.mid`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function showStatus(message, className) {
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${className}`;
+        }
+    </script>
+</body>
+</html>

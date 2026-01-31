@@ -78,13 +78,34 @@ Point the browser source at the visualizer URL. It will react to audio frequenci
 
 If you prefer using MIDI to trigger specific visual events:
 
-*   **R#**: Hypothetical visual programming language or framework designed for real-time audio-visual performance and interactive media. See [R#.md](R#.md) for more information.
+*   **R#**: Visual programming language or framework designed for real-time audio-visual performance and interactive media. See [R#.md](R#.md) for more information.
 *   **VVVV**: Node-based visual programming.
 *   **Processing**: Code-based visuals (Java).
 *   **Pure Data + GEM**: Audio/visual patching.
 *   **Sonic Pi**: Live coding, can trigger visuals via OSC.
 
 All can route their output to OBS via virtual camera or NDI.
+
+## R# Usage
+
+R# is now available as part of this project. To use R#:
+
+1. First generate a MIDI file from your audio:
+   ```bash
+   python audio_to_midi.py your_track.wav --output output.mid --bpm 120 --dynamic
+   ```
+
+2. Run the R# visualizer:
+   ```bash
+   python rsharp.py output.mid --bpm 120
+   ```
+
+R# includes:
+- Real-time MIDI event processing
+- Color-changing visual effects that respond to note on/off events
+- Particle emitter effects that react to MIDI velocity
+- Note number to color mapping
+- Velocity to size/intensity mapping
 
 ---
 
