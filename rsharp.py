@@ -110,12 +110,13 @@ class RSharp:
     def run(self):
         """Main loop"""
         self.running = True
-        self.paused = False
+        self.paused = True
+        self.audio_started = False
         
         if self.audio_file:
             try:
                 pygame.mixer.music.load(self.audio_file)
-                pygame.mixer.music.play()
+                # Wait for user to start
             except Exception as e:
                 print(f"Error playing audio: {e}")
                 
@@ -123,9 +124,8 @@ class RSharp:
         
         # Pause tracking
         pause_offset = 0
-        last_pause_time = 0
+        last_pause_time = start_time
         
-        # UI Elements
         font = pygame.font.Font(None, 24)
         reset_btn_rect = pygame.Rect(10, 10, 80, 30)
         
@@ -140,16 +140,20 @@ class RSharp:
                     elif event.key == pygame.K_SPACE:
                         self.paused = not self.paused
                         if self.paused:
-                            if self.audio_file: pygame.mixer.music.pause()
+                            if self.audio_started and self.audio_file: pygame.mixer.music.pause()
                             last_pause_time = time.time()
                         else:
-                            if self.audio_file: pygame.mixer.music.unpause()
+                            if not self.audio_started and self.audio_file:
+                                pygame.mixer.music.play()
+                                self.audio_started = True
+                            elif self.audio_file: pygame.mixer.music.unpause()
                             pause_offset += time.time() - last_pause_time
                     elif event.key == pygame.K_r:
                         self.reset_visualizer()
                         start_time = time.time()
                         pause_offset = 0
                         self.paused = False
+                        self.audio_started = True
                 elif event.type == pygame.MOUSEBUTTONDOWN:
                     if event.button == 1: # Left click
                         if reset_btn_rect.collidepoint(event.pos):
@@ -157,14 +161,15 @@ class RSharp:
                             start_time = time.time()
                             pause_offset = 0
                             self.paused = False
+                            self.audio_started = True
             
             if self.paused:
                 # Draw paused state overlay
-                pause_text = font.render("PAUSED", True, (255, 255, 255))
+                msg = "PRESS SPACE TO START" if not self.audio_started else "PAUSED"
+                pause_text = font.render(msg, True, (255, 255, 255))
                 text_rect = pause_text.get_rect(center=(self.screen_width/2, self.screen_height/2))
                 self.screen.blit(pause_text, text_rect)
                 pygame.display.flip()
-                self.clock.tick(30)
                 continue
                     
             # Calculate current time

@@ -1,6 +1,7 @@
 import sys
 import os
 import subprocess
+import time
 
 def main():
     # Check if a file was dropped or passed as argument
@@ -39,6 +40,8 @@ def main():
             "--dynamic"
         ]
         subprocess.check_call(cmd_convert)
+        print("Conversion complete.")
+        time.sleep(1.5)
         
         # Step 2: Run Visualizer
         print("\n[2/2] Launching Visualizer...")
