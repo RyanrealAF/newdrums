@@ -1,0 +1,6 @@
+# Test artifacts
+test_audio.wav
+test_output.mid
+output.mid
+__pycache__/
+*.pyc
