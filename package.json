@@ -1,0 +1,15 @@
+{
+  "name": "rsharp-web-visualizer",
+  "version": "1.0.0",
+  "description": "Audio-reactive visuals for OBS Browser Source",
+  "main": "index.html",
+  "scripts": {
+    "start": "npx http-server ."
+  },
+  "keywords": [
+    "visualizer",
+    "audio",
+    "obs"
+  ],
+  "license": "MIT"
+}
