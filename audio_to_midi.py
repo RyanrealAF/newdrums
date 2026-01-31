@@ -2,6 +2,14 @@ import argparse
 import librosa
 import mido
 import numpy as np
+import os
+
+def save_midi_with_directory(mid, output_file):
+    """Save MIDI file, creating parent directories if needed."""
+    output_dir = os.path.dirname(output_file)
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
+    mid.save(output_file)
 
 def audio_to_midi(input_file, output_file, bpm, note, velocity, dynamic):
     print(f"Loading {input_file}...")
@@ -61,7 +69,7 @@ def audio_to_midi(input_file, output_file, bpm, note, velocity, dynamic):
         last_time = event['time']
         
     print(f"Saving MIDI to {output_file}...")
-    mid.save(output_file)
+    save_midi_with_directory(mid, output_file)
     print(f"Done! Created {len(onset_times)} notes.")
 
 if __name__ == "__main__":

@@ -245,7 +245,10 @@
         <div class="controls">
             <div class="control-group">
                 <label for="bpm">BPM (Tempo)</label>
-                <input type="number" id="bpm" value="120" min="40" max="200" step="0.1">
+                <div style="display: flex; gap: 0.5rem;">
+                    <input type="number" id="bpm" value="120" min="40" max="200" step="0.1" style="flex: 1;">
+                    <button id="detectBpmBtn" disabled style="flex: 0 0 auto; padding: 0.75rem 1rem; font-size: 0.875rem;">Detect</button>
+                </div>
             </div>
 
             <div class="control-group">
@@ -287,9 +290,11 @@
         const audioFileInput = document.getElementById('audioFile');
         const fileNameDisplay = document.getElementById('fileName');
         const convertBtn = document.getElementById('convertBtn');
+        const detectBpmBtn = document.getElementById('detectBpmBtn');
         const statusDiv = document.getElementById('status');
         const progressBar = document.getElementById('progressBar');
         const dropText = document.getElementById('dropText');
+        const bpmInput = document.getElementById('bpm');
 
         let audioBuffer = null;
         let audioContext = null;
@@ -335,13 +340,99 @@
                 fileNameDisplay.textContent = `Loaded: ${file.name}`;
                 fileNameDisplay.style.display = 'block';
                 convertBtn.disabled = false;
+                detectBpmBtn.disabled = false;
                 
                 showStatus(`Ready: ${audioBuffer.duration.toFixed(2)}s @ ${audioBuffer.sampleRate}Hz`, 'success');
             } catch (error) {
                 showStatus(`Error loading file: ${error.message}`, 'error');
                 convertBtn.disabled = true;
+                detectBpmBtn.disabled = true;
             }
         }
+
+        // BPM Detection
+        async function detectBPM(buffer) {
+            const channelData = buffer.getChannelData(0);
+            const sampleRate = buffer.sampleRate;
+            
+            // Simple BPM detection using onset times and inter-onset intervals
+            const hopSize = 512;
+            const onsets = [];
+            let prevEnergy = 0;
+            
+            // First pass: detect onsets (same approach as detectOnsets)
+            for (let i = 0; i < channelData.length; i += hopSize) {
+                const frame = channelData.slice(i, i + hopSize);
+                const energy = frame.reduce((sum, sample) => sum + sample * sample, 0) / frame.length;
+                
+                if (energy > prevEnergy * 1.5 && energy > 0.01) {
+                    const time = i / sampleRate;
+                    onsets.push(time);
+                }
+                
+                prevEnergy = energy;
+            }
+            
+            // Calculate inter-onset intervals (IOIs)
+            const ioIs = [];
+            for (let i = 1; i < onsets.length; i++) {
+                ioIs.push(onsets[i] - onsets[i - 1]);
+            }
+            
+            // Find dominant IOI (in seconds)
+            if (ioIs.length === 0) {
+                return 120; // Default if no onsets detected
+            }
+            
+            // Histogram of IOIs
+            const ioiHistogram = {};
+            ioIs.forEach(ioi => {
+                const key = ioi.toFixed(2);
+                ioiHistogram[key] = (ioiHistogram[key] || 0) + 1;
+            });
+            
+            // Find most common IOI
+            let dominantIOI = 0;
+            let maxCount = 0;
+            
+            Object.keys(ioiHistogram).forEach(key => {
+                const ioi = parseFloat(key);
+                const count = ioiHistogram[key];
+                if (count > maxCount && ioi > 0.05 && ioi < 2.0) { // Valid range for BPM 30-1200
+                    maxCount = count;
+                    dominantIOI = ioi;
+                }
+            });
+            
+            if (dominantIOI === 0) {
+                // Fallback: calculate average IOI
+                const averageIOI = ioIs.reduce((sum, ioi) => sum + ioi, 0) / ioIs.length;
+                return Math.round(60 / averageIOI);
+            }
+            
+            const bpm = Math.round(60 / dominantIOI);
+            
+            return Math.max(40, Math.min(200, bpm));
+        }
+
+        detectBpmBtn.addEventListener('click', async () => {
+            if (!audioBuffer) return;
+            
+            detectBpmBtn.disabled = true;
+            convertBtn.disabled = true;
+            showStatus('Detecting BPM...', 'active processing');
+            
+            try {
+                const detectedBpm = await detectBPM(audioBuffer);
+                bpmInput.value = detectedBpm;
+                showStatus(`BPM detected: ${detectedBpm}`, 'success');
+            } catch (error) {
+                showStatus(`Error detecting BPM: ${error.message}`, 'error');
+            }
+            
+            detectBpmBtn.disabled = false;
+            convertBtn.disabled = false;
+        });
 
         convertBtn.addEventListener('click', async () => {
             if (!audioBuffer) return;

@@ -142,28 +142,57 @@ class VisualEffect:
         """Render effect to screen"""
         pass
         
-class ColorChangerEffect(VisualEffect):
-    """Effect that changes color based on MIDI events"""
-    def __init__(self, center_x, center_y, base_color=(255, 0, 0), radius=100):
+# General MIDI Drum Map Positions (normalized 0-1)
+DRUM_POSITIONS = {
+    # Kick
+    35: (0.5, 0.85), 36: (0.5, 0.85),
+    # Snare
+    38: (0.4, 0.6), 40: (0.4, 0.6), 37: (0.4, 0.6),
+    # Hi-Hat
+    42: (0.2, 0.6), 44: (0.2, 0.65), 46: (0.2, 0.5),
+    # Toms
+    41: (0.75, 0.7), 43: (0.65, 0.55), 45: (0.5, 0.45), 
+    47: (0.35, 0.55), 48: (0.3, 0.5), 50: (0.3, 0.5),
+    # Cymbals
+    49: (0.2, 0.3), 57: (0.8, 0.3), 52: (0.85, 0.25), 55: (0.15, 0.25),
+    # Ride
+    51: (0.7, 0.4), 59: (0.7, 0.4), 53: (0.65, 0.35)
+}
+
+class DrumHitEffect(VisualEffect):
+    """Effect that flashes drums at specific positions"""
+    def __init__(self, width, height):
         super().__init__()
-        self.center_x = center_x
-        self.center_y = center_y
-        self.base_color = base_color
-        self.radius = radius
-        self.current_color = base_color
-        self.target_color = base_color
-        self.fade_speed = 0.02
+        self.width = width
+        self.height = height
+        self.hits = []
         
     def trigger(self, event):
-        """Trigger color change based on MIDI event"""
-        if event['type'] == 'note_on':
-            # Map note number to color
+        """Trigger hit visualization"""
+        if event['type'] == 'note_on' and event['velocity'] > 0:
+            note = event['note']
+            # Get position
+            if note in DRUM_POSITIONS:
+                pos = DRUM_POSITIONS[note]
+                x, y = int(pos[0] * self.width), int(pos[1] * self.height)
+            else:
+                # Fallback for non-drum notes
+                x = int((0.1 + ((note % 24) / 24.0) * 0.8) * self.width)
+                y = int(self.height * 0.5)
+
+            # Color based on note
             hue = (event['note'] % 12) / 12.0
-            rgb = self.hsv_to_rgb(hue, 0.8, 0.8)
-            self.target_color = (int(rgb[0] * 255), int(rgb[1] * 255), int(rgb[2] * 255))
+            rgb = self.hsv_to_rgb(hue, 0.7, 1.0)
+            color = (int(rgb[0] * 255), int(rgb[1] * 255), int(rgb[2] * 255))
             
-            # Map velocity to radius
-            self.radius = 50 + (event['velocity'] / 127) * 150
+            self.hits.append({
+                'x': x, 'y': y,
+                'radius': 10,
+                'max_radius': 30 + (event['velocity'] / 127) * 100,
+                'color': color,
+                'life': 1.0,
+                'decay': 0.05
+            })
             
     def hsv_to_rgb(self, h, s, v):
         """Convert HSV to RGB color space"""
@@ -190,39 +219,56 @@ class ColorChangerEffect(VisualEffect):
             return (v, p, q)
             
     def update(self):
-        """Fade current color to target color"""
-        # Fade current color towards target color
-        r = self.current_color[0] + (self.target_color[0] - self.current_color[0]) * self.fade_speed
-        g = self.current_color[1] + (self.target_color[1] - self.current_color[1]) * self.fade_speed
-        b = self.current_color[2] + (self.target_color[2] - self.current_color[2]) * self.fade_speed
-        
-        self.current_color = (int(r), int(g), int(b))
+        """Update hits"""
+        for hit in self.hits:
+            hit['life'] -= hit['decay']
+            hit['radius'] += (hit['max_radius'] - hit['radius']) * 0.2
+            
+        self.hits = [h for h in self.hits if h['life'] > 0]
         
     def render(self, screen):
-        """Render the color changing circle"""
-        pygame.draw.circle(screen, self.current_color, 
-                         (self.center_x, self.center_y), self.radius)
+        """Render hits"""
+        for hit in self.hits:
+            # Fade alpha
+            alpha = int(hit['life'] * 255)
+            color = hit['color']
+            
+            # Draw glow
+            surf = pygame.Surface((int(hit['radius']*2), int(hit['radius']*2)), pygame.SRCALPHA)
+            pygame.draw.circle(surf, (*color, alpha), (int(hit['radius']), int(hit['radius'])), int(hit['radius']))
+            screen.blit(surf, (hit['x'] - hit['radius'], hit['y'] - hit['radius']))
+            
+            # Draw core
+            pygame.draw.circle(screen, (255, 255, 255), (hit['x'], hit['y']), int(hit['radius'] * 0.3 * hit['life']))
         
 class ParticleEmitterEffect(VisualEffect):
     """Effect that emits particles based on MIDI events"""
-    def __init__(self, center_x, center_y, max_particles=200):
+    def __init__(self, width, height, max_particles=200):
         super().__init__()
-        self.center_x = center_x
-        self.center_y = center_y
+        self.width = width
+        self.height = height
         self.max_particles = max_particles
         self.particles = []
         
     def trigger(self, event):
         """Trigger particle emission based on MIDI event"""
-        if event['type'] == 'note_on':
+        if event['type'] == 'note_on' and event['velocity'] > 0:
             # Create particles based on velocity
             num_particles = int((event['velocity'] / 127) * 50) + 10
             
+            note = event['note']
+            if note in DRUM_POSITIONS:
+                pos = DRUM_POSITIONS[note]
+                x, y = int(pos[0] * self.width), int(pos[1] * self.height)
+            else:
+                x = int((0.1 + ((note % 24) / 24.0) * 0.8) * self.width)
+                y = int(self.height * 0.5)
+            
             for _ in range(num_particles):
                 if len(self.particles) < self.max_particles:
-                    self.create_particle(event['note'])
+                    self.create_particle(x, y, event['note'])
                     
-    def create_particle(self, note):
+    def create_particle(self, x, y, note):
         """Create a new particle"""
         angle = np.random.rand() * 2 * np.pi
         speed = np.random.rand() * 3 + 1
@@ -234,8 +280,8 @@ class ParticleEmitterEffect(VisualEffect):
         color = (int(rgb[0] * 255), int(rgb[1] * 255), int(rgb[2] * 255))
         
         particle = {
-            'x': self.center_x,
-            'y': self.center_y,
+            'x': x,
+            'y': y,
             'vx': np.cos(angle) * speed,
             'vy': np.sin(angle) * speed,
             'lifetime': lifetime,
@@ -304,10 +350,10 @@ def main():
     rsharp = RSharp(args.midi_file, args.bpm)
     
     # Add visual effects
-    color_changer = ColorChangerEffect(rsharp.screen_width // 2, rsharp.screen_height // 2)
-    particle_emitter = ParticleEmitterEffect(rsharp.screen_width // 2, rsharp.screen_height // 2)
+    drum_hits = DrumHitEffect(rsharp.screen_width, rsharp.screen_height)
+    particle_emitter = ParticleEmitterEffect(rsharp.screen_width, rsharp.screen_height)
     
-    rsharp.add_visual_effect(color_changer)
+    rsharp.add_visual_effect(drum_hits)
     rsharp.add_visual_effect(particle_emitter)
     
     # Run the visualizer
